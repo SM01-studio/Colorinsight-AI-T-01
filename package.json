@@ -1,5 +1,5 @@
 {
-  "name": "copy-of-colorinsight-ai-02",
+  "name": "colorinsight-ai-v3",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -15,7 +15,8 @@
     "lucide-react": "^0.555.0",
     "@google/genai": "^1.30.0",
     "jspdf-autotable": "^5.0.2",
-    "jspdf": "^3.0.4"
+    "jspdf": "^3.0.4",
+    "html2canvas": "^1.4.1"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

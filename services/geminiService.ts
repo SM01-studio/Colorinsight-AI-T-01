@@ -1,5 +1,6 @@
-import { GoogleGenAI, Type, SchemaType } from "@google/genai";
-import { ColorScheme, Requirement } from "../types";
+
+import { GoogleGenAI, Type } from "@google/genai";
+import { ColorScheme, Requirement, SearchResult } from "../types";
 
 const getAiClient = () => {
   const apiKey = process.env.API_KEY;
@@ -11,12 +12,22 @@ export const extractRequirements = async (pdfText: string): Promise<{ customerNa
   const ai = getAiClient();
   
   const prompt = `
-    Analyze the following Customer Positioning Report text. 
-    1. Identify the customer name/brand name.
-    2. Extract specific color-related scenarios, preferences, target audience color psychology, or design requirements.
+    You are a professional color consultant. Analyze the following PDF text from a client positioning report.
     
-    Text content:
-    ${pdfText.substring(0, 10000)}... (truncated)
+    Tasks:
+    1. Identify the Customer Name or Brand Name.
+    2. Extract key requirements related to color, atmosphere, target audience, and design preferences.
+    
+    Input Text:
+    ${pdfText.substring(0, 15000)}... (truncated)
+    
+    Output JSON format:
+    {
+      "customerName": "String",
+      "requirements": [
+        { "id": "1", "text": "Detailed requirement description in Chinese (Original text)", "summaryEn": "English summary", "sourcePage": 1 }
+      ]
+    }
   `;
 
   const response = await ai.models.generateContent({
@@ -34,8 +45,9 @@ export const extractRequirements = async (pdfText: string): Promise<{ customerNa
               type: Type.OBJECT,
               properties: {
                 id: { type: Type.STRING },
-                text: { type: Type.STRING, description: "The extracted requirement text" },
-                sourcePage: { type: Type.INTEGER, description: "Estimated page number if available, else 1" }
+                text: { type: Type.STRING },
+                summaryEn: { type: Type.STRING },
+                sourcePage: { type: Type.INTEGER }
               }
             }
           }
@@ -44,29 +56,93 @@ export const extractRequirements = async (pdfText: string): Promise<{ customerNa
     }
   });
 
-  if (!response.text) throw new Error("No response from AI");
+  if (!response.text) throw new Error("AI response empty");
   return JSON.parse(response.text);
 };
 
-export const generateAndScoreSchemes = async (requirements: Requirement[]): Promise<ColorScheme[]> => {
+export const performMarketSearch = async (requirements: Requirement[]): Promise<SearchResult> => {
+  const ai = getAiClient();
+  const reqText = requirements.map(r => `${r.text} (${r.summaryEn})`).join("; ");
+
+  const prompt = `
+    Based on the client's color requirements: "${reqText}"
+    
+    Use Google Search to find REAL, GLOBAL data. Focus on International/Western design trends (Europe, North America, Japan) and Global Color Forecasts.
+    
+    1. Search for "2024 2025 Interior Design Color Trends", "Pantone Fashion Color Trend Report", or "Global Color Forecast".
+    2. Search for real competitor projects or similar high-end design case studies globally.
+    
+    Strictly output VALID JSON string only inside a JSON block. No introductory text.
+    JSON Structure:
+    {
+      "trends": [{ "en": "Trend Name", "zh": "Chinese Translation" }],
+      "competitors": [{ "en": "Project Name", "zh": "Chinese Translation" }],
+      "keywords": ["keyword1", "keyword2"],
+      "marketInsight": { "en": "English insight paragraph...", "zh": "Chinese translation..." }
+    }
+  `;
+
+  // NOTE: When using tools like googleSearch, responseMimeType: "application/json" IS NOT ALLOWED.
+  // We must parse the text manually.
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: prompt,
+    config: {
+      tools: [{ googleSearch: {} }]
+    }
+  });
+
+  if (!response.text) throw new Error("Search failed: No response text received from AI.");
+  
+  // Clean markdown formatting if present (e.g., ```json ... ```)
+  let jsonStr = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+  
+  let data;
+  try {
+    data = JSON.parse(jsonStr);
+  } catch (e) {
+    console.error("JSON Parse Error:", e, "Raw Text:", jsonStr);
+    throw new Error("Failed to parse search results. AI response was not valid JSON.");
+  }
+  
+  // Extract Grounding Metadata (Links)
+  const sources: { title: string; url: string }[] = [];
+  const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
+  if (chunks) {
+    chunks.forEach((chunk: any) => {
+      if (chunk.web?.uri && chunk.web?.title) {
+        sources.push({ title: chunk.web.title, url: chunk.web.uri });
+      }
+    });
+  }
+
+  // Deduplicate sources
+  const uniqueSources = sources.filter((v,i,a)=>a.findIndex(v2=>(v2.url===v.url))===i).slice(0, 5);
+
+  return { ...data, sources: uniqueSources };
+};
+
+export const generateAndScoreSchemes = async (requirements: Requirement[], searchData: SearchResult): Promise<ColorScheme[]> => {
   const ai = getAiClient();
   
   const reqText = requirements.map(r => r.text).join("; ");
+  const marketContext = JSON.stringify(searchData);
   
   const prompt = `
-    Act as a world-class Color Strategy Expert.
-    Based on these requirements: "${reqText}"
+    Role: World-class Color Strategy Expert.
+    Context: Client Requirements: "${reqText}". Market Research: ${marketContext}
     
-    1. Search your internal knowledge base for 4 distinct, high-quality color schemes (palettes) that fit these needs.
-    2. One scheme must be highly "Trendy", one "Market Safe", one "Innovative/Bold", and one "Balanced".
-    3. For each scheme, provide a 3-color palette (HEX).
-    4. SIMULATE a quantitative evaluation for each scheme on a scale of 0-10 based on:
-       - Match (Fit with requirements)
-       - Trend (Current popularity in 2024-2025 design)
-       - Market (Commercial acceptance probability)
-       - Innovation (Uniqueness)
-       - Harmony (Color theory balance)
-    5. Provide real-world reference sources (e.g., "Pantone 2025", "WGSN", "Behance Trending").
+    Task: Create 4 distinct, high-end color schemes.
+    1. "Global Trend" (Based on search trends)
+    2. "Market Safe" (Conservative, luxurious)
+    3. "Bold Innovation" (Avant-garde)
+    4. "Balanced Classic" (Timeless)
+    
+    For each scheme:
+    - Provide 3 HEX colors.
+    - Score 0-10 on Match, Trend, Market, Innovation, Harmony.
+    - Provide SWOT analysis (Strengths/Weaknesses) in BOTH English and Chinese.
+    - Usage Advice in BOTH English and Chinese.
   `;
 
   const response = await ai.models.generateContent({
@@ -80,8 +156,8 @@ export const generateAndScoreSchemes = async (requirements: Requirement[]): Prom
           type: Type.OBJECT,
           properties: {
             id: { type: Type.STRING },
-            name: { type: Type.STRING },
-            description: { type: Type.STRING },
+            name: { type: Type.OBJECT, properties: { en: {type: Type.STRING}, zh: {type: Type.STRING} } },
+            description: { type: Type.OBJECT, properties: { en: {type: Type.STRING}, zh: {type: Type.STRING} } },
             palette: {
               type: Type.OBJECT,
               properties: {
@@ -100,22 +176,25 @@ export const generateAndScoreSchemes = async (requirements: Requirement[]): Prom
                 harmony: { type: Type.NUMBER }
               }
             },
-            sources: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
-            },
-            usageAdvice: { type: Type.STRING }
+            sources: { type: Type.ARRAY, items: { type: Type.STRING } },
+            usageAdvice: { type: Type.OBJECT, properties: { en: {type: Type.STRING}, zh: {type: Type.STRING} } },
+            swot: {
+              type: Type.OBJECT,
+              properties: {
+                strengths: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { en: {type: Type.STRING}, zh: {type: Type.STRING} } } },
+                weaknesses: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { en: {type: Type.STRING}, zh: {type: Type.STRING} } } }
+              }
+            }
           }
         }
       }
     }
   });
 
-  if (!response.text) throw new Error("Failed to generate schemes");
+  if (!response.text) throw new Error("Scheme generation failed");
   
   const schemes = JSON.parse(response.text);
   
-  // Calculate weighted scores in frontend to ensure precision
   return schemes.map((s: any) => ({
     ...s,
     weightedScore: (
@@ -126,4 +205,43 @@ export const generateAndScoreSchemes = async (requirements: Requirement[]): Prom
       (s.scores.harmony * 0.10)
     ).toFixed(2)
   }));
+};
+
+export const generateVisualizationImage = async (scheme: ColorScheme, requirements: Requirement[]): Promise<string> => {
+  const ai = getAiClient();
+  
+  const context = requirements.slice(0, 3).map(r => r.summaryEn || r.text).join(", ");
+  
+  const prompt = `
+    Generate a photorealistic, high-end architectural interior photography.
+    
+    Subject: ${context}
+    Style: Architectural Digest, Vogue Living, soft natural lighting, ultra-detailed, 8k.
+    
+    Color Palette to Apply:
+    - Dominant: ${scheme.palette.primary}
+    - Secondary: ${scheme.palette.secondary}
+    - Accent: ${scheme.palette.accent}
+    
+    Composition: Wide angle, cinematic, minimalist, luxury.
+    NO text, NO labels.
+  `;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash-image', // Switch to flash-image for stability with standard keys
+    contents: prompt,
+    config: {
+       imageConfig: { aspectRatio: "16:9" }
+    }
+  });
+
+  if (response.candidates?.[0]?.content?.parts) {
+    for (const part of response.candidates[0].content.parts) {
+      if (part.inlineData) {
+        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+      }
+    }
+  }
+
+  throw new Error("Image generation failed");
 };

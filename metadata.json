@@ -1,5 +1,5 @@
 {
-  "name": "Copy of ColorInsight AI-02",
+  "name": "ColorInsight AI-V3",
   "description": "Intelligent color analysis system that extracts requirements from client PDFs, generates optimal color schemes using Gemini AI, and produces detailed reports.",
   "requestFramePermissions": []
 }
