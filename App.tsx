@@ -1,15 +1,23 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Layout } from './components/Layout';
 import { AppState, Requirement, ColorScheme, SearchResult } from './types';
-import { Upload, FileText, Check, Loader2, Search, ArrowRight, Download, BarChart2, RefreshCw, Wand2, Image as ImageIcon, Globe, Target, TrendingUp, ChevronRight, Printer, ExternalLink, Leaf, AlertCircle } from 'lucide-react';
+import { Upload, Loader2, ArrowRight, Download, RefreshCw, Image as ImageIcon, Globe, Target, TrendingUp, ChevronRight, ExternalLink, AlertCircle } from 'lucide-react';
 import { extractTextFromPDF } from './services/pdfService';
-import { extractRequirements, generateAndScoreSchemes, generateVisualizationImage, performMarketSearch } from './services/geminiService';
+import { extractRequirements, generateAndScoreSchemes, generateVisualizationImage, performMarketSearch, verifyAuth } from './services/geminiService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
+const MAIN_PORTAL = 'https://siliang.cfd';
+
 export default function App() {
+  // Authentication state
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isAuthChecking, setIsAuthChecking] = useState<boolean>(true);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  // App state
   const [state, setState] = useState<AppState>(AppState.LANDING);
   const [customerName, setCustomerName] = useState<string>("");
   const [requirements, setRequirements] = useState<Requirement[]>([]);
@@ -21,6 +29,67 @@ export default function App() {
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
+
+  // Authentication check on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      // Local development: bypass auth if configured
+      const bypassAuth = import.meta.env.VITE_BYPASS_AUTH === 'true';
+      if (bypassAuth) {
+        console.log('[DEV] Auth bypass enabled');
+        // Set a fake token for local development
+        localStorage.setItem('auth_token', 'dev-token');
+        setIsAuthenticated(true);
+        setCurrentUser({ username: 'dev-user', id: 1 });
+        setIsAuthChecking(false);
+        return;
+      }
+
+      // Check for token in localStorage or URL params
+      const urlParams = new URLSearchParams(window.location.search);
+      const tokenFromUrl = urlParams.get('auth_token');
+
+      if (tokenFromUrl) {
+        // Store token from URL
+        localStorage.setItem('auth_token', tokenFromUrl);
+        // Clean URL
+        urlParams.delete('auth_token');
+        const newUrl = urlParams.toString()
+          ? `${window.location.pathname}?${urlParams.toString()}`
+          : window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+      }
+
+      const token = localStorage.getItem('auth_token');
+
+      if (!token) {
+        // No token, redirect to main portal
+        setIsAuthChecking(false);
+        window.location.href = `${MAIN_PORTAL}/index.html?from=colorinsight`;
+        return;
+      }
+
+      // Verify token with backend
+      try {
+        const result = await verifyAuth();
+        if (result.valid) {
+          setIsAuthenticated(true);
+          setCurrentUser(result.user);
+        } else {
+          localStorage.removeItem('auth_token');
+          window.location.href = `${MAIN_PORTAL}/index.html?from=colorinsight`;
+        }
+      } catch (err) {
+        console.error('Auth verification failed:', err);
+        localStorage.removeItem('auth_token');
+        window.location.href = `${MAIN_PORTAL}/index.html?from=colorinsight`;
+      } finally {
+        setIsAuthChecking(false);
+      }
+    };
+
+    checkAuth();
+  }, []);
 
   // --- Handlers ---
 
@@ -217,7 +286,7 @@ export default function App() {
       </div>
 
       <div className="absolute bottom-8 w-full text-center text-[10px] text-gray-500 uppercase tracking-widest z-20">
-        Professional Edition v2.2 • Bilingual Support • Global Search
+        Professional Edition v3.0 • Bilingual Support • Global Search
       </div>
     </div>
   );
@@ -652,6 +721,35 @@ export default function App() {
       </div>
     );
   };
+
+  // Show loading while checking auth
+  if (isAuthChecking) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-[#f8f9fa]">
+        <div className="relative mb-8">
+          <div className="w-16 h-16 border-2 border-slate-200 rounded-full"></div>
+          <div className="absolute inset-0 border-2 border-black border-t-transparent rounded-full animate-spin"></div>
+        </div>
+        <p className="text-slate-500 text-sm">Verifying authentication...</p>
+      </div>
+    );
+  }
+
+  // Not authenticated - should have redirected, but show message just in case
+  if (!isAuthenticated) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-[#f8f9fa]">
+        <AlertCircle className="w-12 h-12 text-slate-400 mb-4" />
+        <p className="text-slate-600 mb-4">Authentication required</p>
+        <a
+          href={`${MAIN_PORTAL}/index.html?from=colorinsight`}
+          className="text-sm text-blue-600 hover:underline"
+        >
+          Go to login
+        </a>
+      </div>
+    );
+  }
 
   return (
     <Layout currentState={state}>

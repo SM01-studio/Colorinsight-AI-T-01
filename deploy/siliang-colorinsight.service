@@ -1,0 +1,18 @@
+[Unit]
+Description=ColorInsight AI Backend
+After=network.target
+
+[Service]
+User=root
+WorkingDirectory=/www/siliang-ai-lab/colorinsight
+Environment="GEMINI_API_KEY=your_gemini_api_key"
+Environment="IMAGE_API_KEY=sk-3QgrJaeHnxNei4C37WEULwaSed2loJmGbJ79Cug3bpYrdtoe"
+Environment="IMAGE_API_ENDPOINT=https://api.apicore.ai/v1/chat/completions"
+Environment="IMAGE_MODEL=gemini-3-pro-image-preview-4k"
+Environment="JWT_SECRET=your-jwt-secret-from-main-portal"
+ExecStart=/www/siliang-ai-lab/venv/bin/gunicorn --bind 127.0.0.1:5002 --timeout 300 app:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
