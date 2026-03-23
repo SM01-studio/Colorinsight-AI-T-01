@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sudo chown:*)",
+      "Bash(npm audit:*)",
+      "Bash(npm run:*)",
+      "Bash(python3 app.py)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(pkill -f \"python3 app.py\")",
+      "Read(//Users/www.macpe.cn/siliang-ai-lab/**)",
+      "Bash(ssh -i /Users/www.macpe.cn/siliang-ai-lab/Aliali.pem -o StrictHostKeyChecking=no root@47.79.0.228 \"mkdir -p /www/siliang-ai-lab/colorinsight\")",
+      "Bash(scp -i /Users/www.macpe.cn/siliang-ai-lab/Aliali.pem -r /Users/www.macpe.cn/CC_colorInsight/backend/* root@47.79.0.228:/www/siliang-ai-lab/colorinsight/)",
+      "Bash(ssh -i /Users/www.macpe.cn/siliang-ai-lab/Aliali.pem root@47.79.0.228 \"ls -la /www/siliang-ai-lab/colorinsight/\")",
+      "Bash(ssh -i /Users/www.macpe.cn/siliang-ai-lab/Aliali.pem root@47.79.0.228 \"cat /www/siliang-ai-lab/backend/.env | grep JWT_SECRET\")",
+      "Bash(ssh -i /Users/www.macpe.cn/siliang-ai-lab/Aliali.pem root@47.79.0.228 \"find /www/siliang-ai-lab -name ''.env*'' 2>/dev/null\")",
+      "Bash(ssh -i /Users/www.macpe.cn/siliang-ai-lab/Aliali.pem root@47.79.0.228 \"cat /www/siliang-ai-lab/writer/.env\")",
+      "Bash(ssh -i /Users/www.macpe.cn/siliang-ai-lab/Aliali.pem root@47.79.0.228 \"ls -la /www/siliang-ai-lab/\")",
+      "Bash(ssh -i /Users/www.macpe.cn/siliang-ai-lab/Aliali.pem root@47.79.0.228 \"cat /www/siliang-ai-lab/backend/.env 2>/dev/null || grep -r ''JWT_SECRET'' /www/siliang-ai-lab/backend/ 2>/dev/null | head -5\")",
+      "Bash(ssh -i /Users/www.macpe.cn/siliang-ai-lab/Aliali.pem root@47.79.0.228 \"ls /www/siliang-ai-lab/backend/\")",
+      "Bash(ssh -i /Users/www.macpe.cn/siliang-ai-lab/Aliali.pem root@47.79.0.228 \"grep -i ''jwt\\\\|secret'' /www/siliang-ai-lab/backend/app.py | head -10\")",
+      "Bash(ssh -i /Users/www.macpe.cn/siliang-ai-lab/Aliali.pem root@47.79.0.228 \"grep -A 20 ''def login'' /www/siliang-ai-lab/backend/app.py\")",
+      "Bash(ssh -i /Users/www.macpe.cn/siliang-ai-lab/Aliali.pem root@47.79.0.228 \"grep -B 5 -A 15 ''def verify'' /www/siliang-ai-lab/backend/app.py\")",
+      "Bash(ssh -i /Users/www.macpe.cn/siliang-ai-lab/Aliali.pem root@47.79.0.228 \"grep -E ''@app.route.*auth|@app.route.*token|@app.route.*session'' /www/siliang-ai-lab/backend/app.py\")",
+      "Bash(ssh -i /Users/www.macpe.cn/siliang-ai-lab/Aliali.pem root@47.79.0.228 \"grep -A 15 \"\"@app.route\\(''/api/auth/me''\"\" /www/siliang-ai-lab/backend/app.py\")",
+      "Bash(scp -i /Users/www.macpe.cn/siliang-ai-lab/Aliali.pem /Users/www.macpe.cn/CC_colorInsight/backend/app.py root@47.79.0.228:/www/siliang-ai-lab/colorinsight/)",
+      "Bash(ssh -i:*)",
+      "Bash(curl -s https://api.siliang.cfd/api/colorinsight/health)",
+      "Bash(git remote:*)",
+      "Bash(git fetch:*)",
+      "Bash(curl -s https://colorinsight.siliang.cfd)",
+      "Bash(curl -sI https://colorinsight.siliang.cfd)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/SM01-studio/Colorinsight-AI-T-01/main/index.html\")",
+      "Bash(lsof -ti:5002)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/SM01-studio/Colorinsight-AI-T-01/main/App.tsx\")",
+      "Bash(curl -s https://api.siliang.cfd/api/colorinsight/verify)"
+    ]
+  }
+}

@@ -214,56 +214,79 @@ python-dotenv>=1.0.0
 
 ---
 
+<a name="2026-03-23-生产环境部署"></a>
+## 2026-03-23 生产环境部署
+
+### 📋 工作概述
+
+完成 ColorInsight AI v3.0 的生产环境部署，包括后端部署到阿里云、前端部署到 Vercel、以及与主门户 Dashboard 的集成。
+
+### ✅ 完成工作
+
+#### 1. 后端部署 (阿里云 47.79.0.228:5002)
+- [x] 上传后端代码到 `/www/siliang-ai-lab/colorinsight/`
+- [x] 配置 Python 虚拟环境和依赖
+- [x] 配置 Systemd 服务 `siliang-colorinsight.service`
+- [x] 配置 Nginx 路由 `/api/colorinsight/` → 端口 5002
+- [x] 配置生产环境 `.env` 文件（API Keys）
+
+**API 端点验证**：
+| 端点 | 状态 |
+|------|------|
+| `/api/colorinsight/health` | ✅ 正常 |
+| `/api/colorinsight/verify` | ✅ 正常 |
+| `/api/colorinsight/extract-requirements` | ✅ 正常 |
+| `/api/colorinsight/market-search` | ✅ 正常 |
+| `/api/colorinsight/generate-schemes` | ✅ 正常 |
+| `/api/colorinsight/generate-image` | ✅ 正常 |
+
+#### 2. 前端部署 (Vercel)
+- [x] 推送代码到 GitHub
+- [x] Vercel 项目配置
+- [x] 域名绑定：`colorinsight.siliang.cfd`
+- [x] DNS 配置：CNAME → `cname.vercel-dns.com`
+- [x] 前端环境变量配置 (`VITE_API_BASE_URL`)
+
+#### 3. 主门户 Dashboard 集成
+- [x] 数据库添加 ColorInsight 应用记录
+  - name: 色彩洞察
+  - url: https://colorinsight.siliang.cfd
+  - module: dm
+  - is_active: 1
+- [x] 分配用户权限
+- [x] Dashboard 添加动态加载容器 `#dynamic-apps-dm`
+- [x] 动态卡片位置调整（位于 ArchiAudit 之前）
+
+### 📁 文件变更清单
+
+```
+部署文件：
+├── deploy/siliang-colorinsight.service  # Systemd 服务配置
+└── deploy/nginx.conf                    # Nginx 路由配置
+
+服务器文件：
+└── /www/siliang-ai-lab/colorinsight/    # 后端代码目录
+    ├── app.py
+    ├── requirements.txt
+    └── .env
+```
+
+### 🔗 访问地址
+
+| 服务 | URL |
+|------|-----|
+| 前端 | https://colorinsight.siliang.cfd |
+| API | https://api.siliang.cfd/api/colorinsight/ |
+| 健康检查 | https://api.siliang.cfd/api/colorinsight/health |
+
+---
+
 <a name="待办事项"></a>
 ## 待办事项
 
-### 🔜 2026-03-23 计划
+### ✅ 2026-03-23 完成
 
-#### 优化工作（部署前）
-
-- [ ] **UI/UX 优化**
-  - [ ] 检查并优化移动端适配
-  - [ ] 优化加载状态显示
-  - [ ] 添加错误处理提示
-
-- [ ] **性能优化**
-  - [ ] 检查 API 请求超时处理
-  - [ ] 优化图片加载
-  - [ ] 添加请求缓存（如需要）
-
-- [ ] **代码优化**
-  - [ ] 检查并修复潜在 bug
-  - [ ] 代码注释完善
-  - [ ] 移除未使用的代码/依赖
-
-- [ ] **安全检查**
-  - [ ] 确认 .env 文件已在 .gitignore 中
-  - [ ] 检查 API Key 不暴露在前端
-  - [ ] 验证认证逻辑完整性
-
-#### 部署工作（优化后）
-
-- [ ] **后端部署**
-  - [ ] 获取主门户的 JWT_SECRET
-  - [ ] 上传代码到阿里云 `/www/siliang-ai-lab/colorinsight/`
-  - [ ] 配置 Systemd 服务
-  - [ ] 配置 Nginx 路由
-  - [ ] 启动并测试后端
-
-- [ ] **前端部署**
-  - [ ] 更新 .env.local 为生产环境配置
-  - [ ] 推送代码到 GitHub
-  - [ ] Vercel 自动部署
-  - [ ] 配置子域名 `colorinsight.siliang.cfd`
-
-- [ ] **数据库配置**
-  - [ ] 在 apps 表添加应用记录
-  - [ ] 配置用户权限
-
-- [ ] **最终测试**
-  - [ ] 完整流程测试
-  - [ ] 认证集成测试
-  - [ ] 性能测试
+所有部署工作已完成！
 
 ---
 

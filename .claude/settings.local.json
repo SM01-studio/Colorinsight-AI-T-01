@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git clone:*)",
+      "Bash(curl -sI \"https://pro.filesystem.site/cdn/20260322/d336ed5c-7741-44a6-ae61-d7a7717c4b90.jpeg\")",
+      "Bash(pip install:*)",
+      "Bash(python3 -m pip install -r backend/requirements.txt)",
+      "Bash(curl -s http://localhost:5002/api/colorinsight/health)",
+      "Bash(curl -s -X POST http://localhost:5002/api/colorinsight/generate-image -H \"Content-Type: application/json\" -H \"Authorization: Bearer dev-token\" -d '{:*)",
+      "Bash(curl -s -X POST http://localhost:5002/api/colorinsight/extract-requirements -H \"Content-Type: application/json\" -H \"Authorization: Bearer dev-token\" -d '{\"\"pdfText\"\": \"\"客户：万科集团\\\\n项目：高端住宅设计\\\\n需求：1. 希望采用现代简约风格\\\\n2. 主色调偏好冷色系\\\\n3. 目标客群为35-45岁城市精英\"\"}')",
+      "Bash(curl -s -X POST http://localhost:5002/api/colorinsight/market-search -H \"Content-Type: application/json\" -H \"Authorization: Bearer dev-token\" -d '{\"\"requirements\"\": [{\"\"text\"\": \"\"现代简约风格\"\", \"\"summaryEn\"\": \"\"Modern minimalist style\"\"}]}')",
+      "Bash(npm install:*)",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(curl -s http://localhost:5002/api/colorinsight/verify -H \"Authorization: Bearer dev-token\")",
+      "Bash(curl -s \"http://localhost:3000/index.tsx\")"
+    ]
+  }
+}

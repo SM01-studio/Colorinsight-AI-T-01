@@ -170,6 +170,28 @@ def health_check():
     return jsonify({'status': 'ok', 'service': 'colorinsight'})
 
 
+@app.route('/api/colorinsight/verify', methods=['GET'])
+def verify_token():
+    """Verify token with main portal"""
+    auth_header = request.headers.get('Authorization', '')
+
+    if not auth_header.startswith('Bearer '):
+        return jsonify({'valid': False, 'error': 'Missing token'}), 401
+
+    token = auth_header.replace('Bearer ', '')
+
+    # Development mode: accept dev-token
+    if DEV_MODE and token == 'dev-token':
+        return jsonify({'valid': True, 'user': {'id': 1, 'username': 'dev-user'}})
+
+    # Verify token with main portal
+    user_data = verify_token_with_portal(token)
+    if user_data:
+        return jsonify({'valid': True, 'user': user_data.get('user', {})})
+
+    return jsonify({'valid': False, 'error': 'Invalid token'}), 401
+
+
 @app.route('/api/colorinsight/extract-requirements', methods=['POST'])
 @require_auth
 def extract_requirements():
