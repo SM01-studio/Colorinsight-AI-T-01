@@ -29,19 +29,25 @@ CORS(app, origins=['https://colorinsight.siliang.cfd', 'http://localhost:3000'])
 
 # Configuration - All values must be set via environment variables
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
-IMAGE_API_KEY = os.environ.get('IMAGE_API_KEY')
-IMAGE_API_ENDPOINT = os.environ.get('IMAGE_API_ENDPOINT', 'https://api.apicore.ai/v1/chat/completions')
-IMAGE_MODEL = os.environ.get('IMAGE_MODEL', 'gemini-3-pro-image-preview-4k')
+GEMINI_API_ENDPOINT = os.environ.get('GEMINI_API_ENDPOINT', 'https://api.linkapi.ai/v1/chat/completions')
+GEMINI_TEXT_MODEL = os.environ.get('GEMINI_TEXT_MODEL', 'gemini-3.1-flash-lite-preview')
+
+# Google原生API (仅用于Google Search grounding)
+GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
+GOOGLE_GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models'
+
+IMAGE_API_KEY = os.environ.get('IMAGE_API_KEY', os.environ.get('GEMINI_API_KEY'))
+IMAGE_API_ENDPOINT = os.environ.get('IMAGE_API_ENDPOINT', 'https://api.linkapi.ai/v1/chat/completions')
+IMAGE_MODEL = os.environ.get('IMAGE_MODEL', 'gemini-3.1-flash-image-preview')
 MAIN_PORTAL_API = os.environ.get('MAIN_PORTAL_API', 'https://api.siliang.cfd')
 
 # Validate required configuration
 if not GEMINI_API_KEY:
     print("[WARN] GEMINI_API_KEY not set - text analysis will fail")
+if not GOOGLE_API_KEY:
+    print("[WARN] GOOGLE_API_KEY not set - market search (Google Search) will be unavailable")
 if not IMAGE_API_KEY:
     print("[WARN] IMAGE_API_KEY not set - image generation will fail")
-
-# Gemini API configuration
-GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models'
 
 
 # ============ Authentication Middleware ============
@@ -92,31 +98,53 @@ def require_auth(f):
 
 # ============ Helper Functions ============
 
-def call_gemini_api(model: str, prompt: str, response_schema: dict = None, use_search: bool = False):
-    """Call Gemini API with optional JSON schema and Google Search"""
-    url = f"{GEMINI_ENDPOINT}/{model}:generateContent?key={GEMINI_API_KEY}"
-
-    headers = {'Content-Type': 'application/json'}
-
-    body = {
-        'contents': [{'parts': [{'text': prompt}]}],
-        'generationConfig': {}
-    }
-
-    if response_schema and not use_search:
-        body['generationConfig']['responseMimeType'] = 'application/json'
-        body['generationConfig']['responseSchema'] = response_schema
-
+def call_gemini_api(model: str = None, prompt: str = '', response_schema: dict = None, use_search: bool = False):
+    """Call Gemini API - LinkAPI for text analysis, Google native API for search"""
     if use_search:
-        body['tools'] = [{'googleSearch': {}}]
-
-    try:
-        response = requests.post(url, headers=headers, json=body, timeout=120)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        app.logger.error(f"Gemini API error: {e}")
-        raise Exception(f"Gemini API call failed: {str(e)}")
+        # Google原生API (支持Google Search grounding)
+        if not GOOGLE_API_KEY:
+            raise Exception("GOOGLE_API_KEY not set - Google Search is unavailable")
+        url = f"{GOOGLE_GEMINI_ENDPOINT}/gemini-2.5-flash:generateContent?key={GOOGLE_API_KEY}"
+        headers = {'Content-Type': 'application/json'}
+        body = {
+            'contents': [{'parts': [{'text': prompt}]}],
+            'tools': [{'googleSearch': {}}]
+        }
+        try:
+            response = requests.post(url, headers=headers, json=body, timeout=120)
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            app.logger.error(f"Google Gemini API error: {e}")
+            raise Exception(f"Google Gemini API call failed: {str(e)}")
+    else:
+        # LinkAPI (OpenAI compatible format)
+        url = GEMINI_API_ENDPOINT
+        model = model or GEMINI_TEXT_MODEL
+        headers = {
+            'Authorization': f'Bearer {GEMINI_API_KEY}',
+            'Content-Type': 'application/json'
+        }
+        body = {
+            'model': model,
+            'messages': [{'role': 'user', 'content': prompt}]
+        }
+        try:
+            response = requests.post(url, headers=headers, json=body, timeout=120)
+            if response.status_code != 200:
+                app.logger.error(f"LinkAPI error {response.status_code}: {response.text[:500]}")
+            response.raise_for_status()
+            result = response.json()
+            return {
+                'candidates': [{
+                    'content': {
+                        'parts': [{'text': result['choices'][0]['message']['content']}]
+                    }
+                }]
+            }
+        except requests.exceptions.RequestException as e:
+            app.logger.error(f"LinkAPI error: {e}")
+            raise Exception(f"LinkAPI call failed: {str(e)}")
 
 
 def extract_text_from_response(response: dict) -> str:
@@ -125,6 +153,16 @@ def extract_text_from_response(response: dict) -> str:
         return response['candidates'][0]['content']['parts'][0]['text']
     except (KeyError, IndexError):
         return ''
+
+
+def clean_json_response(text: str) -> str:
+    """Clean AI response text to extract valid JSON"""
+    text = text.strip()
+    # Remove markdown code blocks
+    text = re.sub(r'^```json\s*', '', text)
+    text = re.sub(r'^```\s*', '', text)
+    text = re.sub(r'\s*```$', '', text)
+    return text.strip()
 
 
 def extract_sources_from_response(response: dict) -> list:
@@ -242,12 +280,12 @@ def extract_requirements():
     }
 
     try:
-        response = call_gemini_api('gemini-2.5-flash', prompt, schema)
-        text = extract_text_from_response(response)
+        response = call_gemini_api(None, prompt, schema)
+        text = clean_json_response(extract_text_from_response(response))
         result = json.loads(text)
         return jsonify(result)
     except json.JSONDecodeError as e:
-        return jsonify({'error': f'Failed to parse AI response: {str(e)}'}), 500
+        return jsonify({'error': f'Failed to parse AI response: {str(e)}', 'raw_text': text[:200]}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -316,107 +354,64 @@ def generate_schemes():
     search_data = data['searchData']
 
     req_text = '; '.join([r.get('text', '') for r in requirements])
-    market_context = json.dumps(search_data, ensure_ascii=False)
+    trends = search_data.get('trends', [])
+    competitors = search_data.get('competitors', [])
+    keywords = search_data.get('keywords', [])
+    market_insight = search_data.get('marketInsight', {}).get('en', '')
 
-    prompt = f"""
-    Role: World-class Color Strategy Expert.
-    Context: Client Requirements: "{req_text}". Market Research: {market_context}
+    prompt = f"""Role: World-class Color Strategy Expert.
 
-    Task: Create 4 distinct, high-end color schemes.
-    1. "Global Trend" (Based on search trends)
-    2. "Market Safe" (Conservative, luxurious)
-    3. "Bold Innovation" (Avant-garde)
-    4. "Balanced Classic" (Timeless)
+Client Requirements: {req_text}
 
-    For each scheme:
-    - Provide 3 HEX colors.
-    - Score 0-10 on Match, Trend, Market, Innovation, Harmony.
-    - Provide SWOT analysis (Strengths/Weaknesses) in BOTH English and Chinese.
-    - Usage Advice in BOTH English and Chinese.
-    """
+Market Research:
+- Trends: {', '.join([t.get('en', '') for t in trends[:5]])}
+- Keywords: {', '.join(keywords[:10])}
+- Market Insight: {market_insight}
 
-    schema = {
-        "type": "array",
-        "items": {
-            "type": "object",
-            "properties": {
-                "id": {"type": "string"},
-                "name": {
-                    "type": "object",
-                    "properties": {
-                        "en": {"type": "string"},
-                        "zh": {"type": "string"}
-                    }
-                },
-                "description": {
-                    "type": "object",
-                    "properties": {
-                        "en": {"type": "string"},
-                        "zh": {"type": "string"}
-                    }
-                },
-                "palette": {
-                    "type": "object",
-                    "properties": {
-                        "primary": {"type": "string"},
-                        "secondary": {"type": "string"},
-                        "accent": {"type": "string"}
-                    }
-                },
-                "scores": {
-                    "type": "object",
-                    "properties": {
-                        "match": {"type": "number"},
-                        "trend": {"type": "number"},
-                        "market": {"type": "number"},
-                        "innovation": {"type": "number"},
-                        "harmony": {"type": "number"}
-                    }
-                },
-                "sources": {"type": "array", "items": {"type": "string"}},
-                "usageAdvice": {
-                    "type": "object",
-                    "properties": {
-                        "en": {"type": "string"},
-                        "zh": {"type": "string"}
-                    }
-                },
-                "swot": {
-                    "type": "object",
-                    "properties": {
-                        "strengths": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "en": {"type": "string"},
-                                    "zh": {"type": "string"}
-                                }
-                            }
-                        },
-                        "weaknesses": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "en": {"type": "string"},
-                                    "zh": {"type": "string"}
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+⛔ CRITICAL: Output ONLY a valid JSON array. No markdown, no code blocks, no extra text.
+
+Create 4 distinct high-end color schemes:
+1. "Global Trend" - Based on market trends
+2. "Market Safe" - Conservative, luxurious
+3. "Bold Innovation" - Avant-garde
+4. "Balanced Classic" - Timeless
+
+Each scheme object must have EXACTLY this structure:
+{{"id":"1","name":{{"en":"Scheme Name","zh":"方案名"}},"palette":{{"primary":"#HEX","secondary":"#HEX","accent":"#HEX"}},"scores":{{"match":8,"trend":7,"market":6,"innovation":9,"harmony":8}},"description":{{"en":"English description 2-3 sentences","zh":"中文描述 2-3句话"}},"usageAdvice":{{"en":"How to apply this palette in interior design (2-3 sentences)","zh":"如何在家居设计中应用此配色方案（2-3句话）"}},"swot":{{"strengths":[{{"en":"Strength description","zh":"优势描述"}}],"weaknesses":[{{"en":"Weakness description","zh":"劣势描述"}}]}}}}
+
+Output the JSON array ONLY, nothing else."""
 
     try:
-        response = call_gemini_api('gemini-2.5-flash', prompt, schema)
-        text = extract_text_from_response(response)
+        response = call_gemini_api(None, prompt)
+        text = clean_json_response(extract_text_from_response(response))
         schemes = json.loads(text)
 
-        # Calculate weighted scores
+        # Ensure all required fields exist (defensive defaults)
         for scheme in schemes:
+            # Ensure name
+            if not scheme.get('name'):
+                scheme['name'] = {'en': f'Scheme {scheme.get("id", "?")}', 'zh': f'方案 {scheme.get("id", "?")}'}
+            # Ensure description
+            if not scheme.get('description'):
+                scheme['description'] = {'en': 'No description available', 'zh': '暂无描述'}
+            # Ensure usageAdvice
+            if not scheme.get('usageAdvice'):
+                scheme['usageAdvice'] = {'en': 'Apply primary color to walls, secondary to furniture, accent to accessories.', 'zh': '主色用于墙面，辅色用于家具，点缀色用于软装配饰。'}
+            # Ensure swot
+            if not scheme.get('swot'):
+                scheme['swot'] = {
+                    'strengths': [{'en': 'Well-balanced palette', 'zh': '配色均衡'}],
+                    'weaknesses': [{'en': 'May need adjustment for specific spaces', 'zh': '可能需要根据具体空间微调'}]
+                }
+            if not scheme.get('swot', {}).get('strengths'):
+                scheme.setdefault('swot', {})['strengths'] = [{'en': 'Well-balanced palette', 'zh': '配色均衡'}]
+            if not scheme.get('swot', {}).get('weaknesses'):
+                scheme.setdefault('swot', {})['weaknesses'] = [{'en': 'May need adjustment for specific spaces', 'zh': '可能需要根据具体空间微调'}]
+            # Ensure sources
+            if not scheme.get('sources'):
+                scheme['sources'] = []
+
+            # Calculate weighted scores
             scores = scheme.get('scores', {})
             scheme['weightedScore'] = round(
                 scores.get('match', 0) * 0.30 +
