@@ -303,3 +303,94 @@ python-dotenv>=1.0.0
 
 - **开发者**: SM01 Studio
 - **GitHub**: https://github.com/SM01-studio/Colorinsight-AI-T-01
+
+---
+
+## 2026-03-27 — API 迁移 (Google Gemini → LinkAPI)
+
+### 背景
+Google Gemini 免费 API 额度用完，需要切换到 LinkAPI (OpenAI 兼容格式)。
+
+### 双 API 架构
+
+| 用途 | API | 模型 | 说明 |
+|---|---|---|---|
+| 文本分析 | LinkAPI | gemini-3.1-flash-lite-preview | extract-requirements, generate-schemes |
+| Google Search | Google 原生 API | gemini-2.5-flash | market-search (需要 googleSearch grounding) |
+| 图像生成 | LinkAPI | gemini-3.1-flash-image-preview | generate-image |
+
+### 修改文件
+- `app.py` — 主要修改文件（后端）
+  - 新增 `call_gemini_api()` 双路由逻辑（LinkAPI vs Google 原生）
+  - 新增 `clean_json_response()` 清理 markdown 代码块
+  - LinkAPI 响应转换为 Gemini 格式以兼容现有解析函数
+  - `generate-schemes` prompt 补全 `usageAdvice` 和 `swot` 字段
+  - `generate-schemes` 添加防御性默认值
+  - `generate-image` 添加 markdown+base64 提取逻辑
+
+### 配置 (.env)
+```
+GEMINI_API_KEY=sk-UM2pn3uKLuCCWvHXvPCukBvtzhWQyHe33roTFBMrKM9ypb1i
+GEMINI_API_ENDPOINT=https://api.linkapi.ai/v1/chat/completions
+GEMINI_TEXT_MODEL=gemini-3.1-flash-lite-preview
+GOOGLE_API_KEY=AIzaSyAjPfzr1xAq5hV6h_sthcTu7BTFx6gS4LA
+IMAGE_API_KEY=sk-UM2pn3uKLuCCWvHXvPCukBvtzhWQyHe33roTFBMrKM9ypb1i
+IMAGE_API_ENDPOINT=https://api.linkapi.ai/v1/chat/completions
+IMAGE_MODEL=gemini-3.1-flash-image-preview
+```
+
+### 修复记录
+
+#### 1. 403 Forbidden (gemini-2.5-flash)
+- **错误**: LinkAPI key 无权访问 gemini-2.5-flash 模型
+- **修复**: extract-requirements 和 generate-schemes 改用默认模型 gemini-3.1-flash-lite-preview
+- **注意**: market-search 的 Google Search 仍使用 Google 原生 API 的 gemini-2.5-flash
+
+#### 2. JSON Parse Error (char 0)
+- **错误**: LinkAPI 不支持 Google 的 responseSchema 参数，返回 markdown 包裹的 JSON
+- **修复**: 添加 `clean_json_response()` 函数，清理 ```` ```json ``` ```` 代码块标记
+
+#### 3. Result 页面白屏
+- **错误**: `Cannot read properties of undefined (reading 'en')`
+- **原因**: generate-schemes prompt 缺少 `usageAdvice` 和 `swot` 字段，前端直接访问 `bestScheme.usageAdvice.en` 崩溃
+- **修复**:
+  - prompt 补全 usageAdvice 和 swot 字段模板
+  - 后端解析后添加防御性默认值（所有必需字段）
+
+#### 4. 图片不渲染
+- **错误**: `No image found in API response`
+- **原因**: LinkAPI 返回 `![image](data:image/jpeg;base64,...)` 格式，代码只匹配 http URL
+- **修复**: 添加正则 `r'!\[.*?\]\((data:image[^)]+)\)'` 提取 markdown 包裹的 base64 数据
+
+#### 5. 前端 React Error #310
+- **错误**: Hooks 调用顺序问题（在之前的 ArchiAudit 迁移时发现）
+- **原因**: auth 检查的 useEffect + 条件 return 放在其他 useState 之前
+- **修复**: 所有 useState 移到条件返回之前
+
+### 部署信息
+- 服务器后端目录: `/www/siliang-ai-lab/colorinsight/` (非 git 仓库，SCP 直接部署)
+- 前端: Vercel (colorinsight.siliang.cfd)
+- SSH: `ssh -i /Users/www.macpe.cn/Downloads/Aliali.pem root@47.79.0.228`
+
+### 注意事项
+- LinkAPI 返回 OpenAI 格式，`call_gemini_api()` 非 search 分支会转换为 Gemini 格式
+- `extract_text_from_response()` 和 `extract_sources_from_response()` 保持不变
+- 服务器 .env 中的配置优先于代码中的默认值
+
+---
+
+## 2026-03-29 — 后端持久化 + sessionId 传递
+
+### 后端持久化存储
+为 ColorInsight 后端添加服务器端会话持久化，支持文件管理功能。
+- 存储目录：`data/sessions/`（会话 JSON）+ `data/output/`（输出文件）
+- `/extract-requirements`：创建会话，保存提取的需求
+- `/market-search`：保存市场搜索结果
+- `/generate-schemes`：保存评分配色方案
+- `/generate-image`：保存可视化效果图
+- 新增 4 个管理 API：`GET /api/admin/sessions`、`DELETE /api/admin/sessions/<id>`、`POST /api/admin/sessions/batch-delete`、`GET /api/admin/sessions/<id>/download`
+
+### 前端 sessionId 传递
+让前端在同一次使用流程中传递同一个 sessionId，使文件管理显示为一条完整记录。
+- `services/geminiService.ts`：`extractRequirements`、`performMarketSearch`、`generateAndScoreSchemes`、`generateVisualizationImage` 添加 `sessionId` 参数
+- `App.tsx`：添加 `sessionId` 状态，从 `/extract-requirements` 响应中提取并传递给后续 API 调用
