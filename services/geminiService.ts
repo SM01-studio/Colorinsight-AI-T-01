@@ -87,11 +87,12 @@ export const verifyAuth = async (): Promise<{ valid: boolean; user?: any }> => {
  * Extract color requirements from PDF text
  */
 export const extractRequirements = async (
-  pdfText: string
-): Promise<{ customerName: string; requirements: Requirement[] }> => {
+  pdfText: string,
+  sessionId?: string
+): Promise<{ customerName: string; requirements: Requirement[]; sessionId?: string }> => {
   return apiRequest('/extract-requirements', {
     method: 'POST',
-    body: JSON.stringify({ pdfText }),
+    body: JSON.stringify({ pdfText, ...(sessionId ? { sessionId } : {}) }),
   });
 };
 
@@ -99,11 +100,12 @@ export const extractRequirements = async (
  * Perform market research using Google Search
  */
 export const performMarketSearch = async (
-  requirements: Requirement[]
+  requirements: Requirement[],
+  sessionId?: string
 ): Promise<SearchResult> => {
   return apiRequest('/market-search', {
     method: 'POST',
-    body: JSON.stringify({ requirements }),
+    body: JSON.stringify({ requirements, ...(sessionId ? { sessionId } : {}) }),
   });
 };
 
@@ -112,11 +114,12 @@ export const performMarketSearch = async (
  */
 export const generateAndScoreSchemes = async (
   requirements: Requirement[],
-  searchData: SearchResult
+  searchData: SearchResult,
+  sessionId?: string
 ): Promise<ColorScheme[]> => {
   return apiRequest('/generate-schemes', {
     method: 'POST',
-    body: JSON.stringify({ requirements, searchData }),
+    body: JSON.stringify({ requirements, searchData, ...(sessionId ? { sessionId } : {}) }),
   });
 };
 
@@ -125,11 +128,12 @@ export const generateAndScoreSchemes = async (
  */
 export const generateVisualizationImage = async (
   scheme: ColorScheme,
-  requirements: Requirement[]
+  requirements: Requirement[],
+  sessionId?: string
 ): Promise<string> => {
   const result = await apiRequest<{ image: string }>('/generate-image', {
     method: 'POST',
-    body: JSON.stringify({ scheme, requirements }),
+    body: JSON.stringify({ scheme, requirements, ...(sessionId ? { sessionId } : {}) }),
   });
   return result.image;
 };

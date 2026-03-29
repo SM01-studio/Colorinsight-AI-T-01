@@ -29,6 +29,7 @@ export default function App() {
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
   const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
   const [isDownloading, setIsDownloading] = useState<boolean>(false);
+  const [sessionId, setSessionId] = useState<string>('');
 
   // Authentication check on mount
   useEffect(() => {
@@ -114,9 +115,10 @@ export default function App() {
       
       setLoadingMsg("AI Analyzing Requirements... / AI 正在提取品牌需求...");
       const result = await extractRequirements(text);
-      
+
       setCustomerName(result.customerName || "Client");
       setRequirements(result.requirements);
+      if (result.sessionId) setSessionId(result.sessionId);
       setState(AppState.CONFIRM_REQUIREMENTS);
     } catch (err: any) {
       console.error(err);
@@ -131,7 +133,7 @@ export default function App() {
     setLoadingMsg("Connecting to Global Knowledge Base (Google Search)... / 正在连接全球知识库（搜索）...");
     
     try {
-      const data = await performMarketSearch(requirements);
+      const data = await performMarketSearch(requirements, sessionId);
       setSearchResult(data);
       setState(AppState.VIEW_SEARCH_RESULTS);
     } catch (err: any) {
@@ -150,7 +152,7 @@ export default function App() {
     setLoadingMsg("Generating Color Strategies... / 正在生成色彩策略...");
     
     try {
-      const generatedSchemes = await generateAndScoreSchemes(requirements, searchResult);
+      const generatedSchemes = await generateAndScoreSchemes(requirements, searchResult, sessionId);
       setSchemes(generatedSchemes);
       
       const best = generatedSchemes.reduce((prev, current) => 
@@ -170,7 +172,7 @@ export default function App() {
     if (!bestScheme) return;
     setIsGeneratingImage(true);
     try {
-      const base64Image = await generateVisualizationImage(bestScheme, requirements);
+      const base64Image = await generateVisualizationImage(bestScheme, requirements, sessionId);
       setGeneratedImage(base64Image);
     } catch (err) {
       console.error("Image generation failed", err);
